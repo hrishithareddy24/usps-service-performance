@@ -163,4 +163,4 @@ st.plotly_chart(fig4, use_container_width=True)
 
 st.markdown("---")
 st.caption("Data source: USPS Service Performance Dashboard (spm.usps.com) | Rural classification: HRSA FORHP | Pipeline: Apache Spark on GCP Dataproc | Team Nexus Ninjas | Challenge X | GMU")
-EOF
+
