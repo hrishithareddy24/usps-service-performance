@@ -1,4 +1,3 @@
-# usps-service-performance
 # USPS Service Performance Insights Across Rural America
 
 ## Team Nexus Ninjas | Challenge X | George Mason University
