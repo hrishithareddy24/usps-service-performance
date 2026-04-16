@@ -42,11 +42,12 @@ def load_data():
     rural_urban = read_folder('results/rural_urban_summary/')
     district    = read_folder('results/district_summary/')
     mailtype    = read_folder('results/mailtype_summary/')
+    origin      = read_folder('results/origin_summary/')
+    dest        = read_folder('results/dest_summary/')
 
     rural_urban = rural_urban.dropna(subset=['rural_urban']).copy()
     rural_urban['rural_urban'] = rural_urban['rural_urban'].map({'Yes': 'Rural', 'No': 'Urban'})
     rural_urban['avg_score_pct'] = rural_urban['avg_score'] * 100
-    rural_urban['avg_score_plus1_pct'] = rural_urban['avg_score_plus_1'] * 100
 
     district = district.dropna(subset=['avg_score']).copy()
     district['avg_score_pct'] = district['avg_score'] * 100
@@ -56,10 +57,17 @@ def load_data():
     mailtype['rural_urban_label'] = mailtype['rural_urban'].map({'Yes': 'Rural', 'No': 'Urban'})
     mailtype['mail_simple'] = mailtype['prodt'].str[:45]
 
-    return rural_urban, district, mailtype
+    origin['avg_score_pct'] = origin['avg_score'] * 100
+    origin['type'] = 'Sending (Origin)'
+
+    dest['avg_score_pct'] = dest['avg_score'] * 100
+    dest['type'] = 'Receiving (Destination)'
+    dest = dest.rename(columns={'dest_rural_label': 'origin_rural_label'})
+
+    return rural_urban, district, mailtype, origin, dest
 
 with st.spinner("Loading latest data from GCP..."):
-    rural_urban, district, mailtype = load_data()
+    rural_urban, district, mailtype, origin, dest = load_data()
 
 if st.button("Refresh Data"):
     st.cache_data.clear()
@@ -68,6 +76,7 @@ if st.button("Refresh Data"):
 st.caption(f"Data loaded: {rural_urban['total_records'].sum():,.0f} total records analyzed")
 st.markdown("---")
 
+# Key Metrics
 st.subheader("Key Performance Metrics")
 rural = rural_urban[rural_urban['rural_urban'] == 'Rural'].iloc[0]
 urban = rural_urban[rural_urban['rural_urban'] == 'Urban'].iloc[0]
@@ -78,13 +87,32 @@ col1.metric("Rural On-Time Rate", f"{rural['avg_score_pct']:.1f}%",
             f"{rural['avg_score_pct'] - fy26_target:.1f}% vs FY26 Target", delta_color="inverse")
 col2.metric("Urban On-Time Rate", f"{urban['avg_score_pct']:.1f}%",
             f"{urban['avg_score_pct'] - fy26_target:.1f}% vs FY26 Target", delta_color="inverse")
-col3.metric("Rural vs Urban Gap", f"{abs(rural['avg_score_pct'] - urban['avg_score_pct']):.1f}%",
+col3.metric("Rural vs Urban Gap",
+            f"{abs(rural['avg_score_pct'] - urban['avg_score_pct']):.1f}%",
             "Rural higher" if rural['avg_score_pct'] > urban['avg_score_pct'] else "Urban higher")
-col4.metric("Rural Avg Days", f"{rural['avg_days']:.2f}", f"{rural['avg_days'] - urban['avg_days']:.2f} vs Urban")
+col4.metric("Rural Avg Days", f"{rural['avg_days']:.2f}",
+            f"{rural['avg_days'] - urban['avg_days']:.2f} vs Urban")
 col5.metric("Total Records", f"{rural_urban['total_records'].sum()/1e6:.0f}M", "rows analyzed")
 
 st.markdown("---")
 
+# Sending vs Receiving
+st.subheader("Sending vs Receiving Performance")
+combined = pd.concat([origin, dest], ignore_index=True)
+fig0 = px.bar(combined, x='origin_rural_label', y='avg_score_pct',
+              color='type', barmode='group',
+              color_discrete_map={'Sending (Origin)': '#1D9E75', 'Receiving (Destination)': '#185FA5'},
+              text='avg_score_pct',
+              labels={'avg_score_pct': 'On-Time Rate (%)', 'origin_rural_label': '', 'type': ''})
+fig0.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+fig0.add_hline(y=fy26_target, line_dash="dash", line_color="red",
+               annotation_text=f"FY26 Target ({fy26_target}%)")
+fig0.update_layout(yaxis_range=[78, 92])
+st.plotly_chart(fig0, use_container_width=True)
+
+st.markdown("---")
+
+# Rural vs Urban
 col1, col2 = st.columns(2)
 with col1:
     st.subheader("On-Time Rate: Rural vs Urban")
@@ -115,8 +143,9 @@ with col2:
     st.plotly_chart(fig2, use_container_width=True)
 
 st.markdown("---")
-st.subheader("Worst Performing Rural Districts")
 
+# Worst Districts
+st.subheader("Worst Performing Rural Districts")
 district_rural = district[district['rural_urban'] == 'Yes'].sort_values('avg_score')
 rural_avg = rural_urban[rural_urban['rural_urban'] == 'Rural']['avg_score_pct'].iloc[0]
 
@@ -139,8 +168,9 @@ fig3.update_layout(coloraxis_showscale=False,
 st.plotly_chart(fig3, use_container_width=True)
 
 st.markdown("---")
-st.subheader("Performance by Mail Type")
 
+# Mail Type
+st.subheader("Performance by Mail Type")
 mail_filter = st.selectbox("Filter by area type", ['Both', 'Rural Only', 'Urban Only'])
 if mail_filter == 'Rural Only':
     mailtype_filtered = mailtype[mailtype['rural_urban'] == 'Yes']
@@ -155,7 +185,8 @@ mailtype_filtered = mailtype_filtered[mailtype_filtered['mail_simple'].isin(top_
 fig4 = px.bar(mailtype_filtered, x='mail_simple', y='avg_score_pct',
               color='rural_urban_label', barmode='group',
               color_discrete_map={'Rural': '#E8593C', 'Urban': '#1D9E75'},
-              labels={'avg_score_pct': 'On-Time Rate (%)', 'mail_simple': 'Mail Type', 'rural_urban_label': ''})
+              labels={'avg_score_pct': 'On-Time Rate (%)', 'mail_simple': 'Mail Type',
+                      'rural_urban_label': ''})
 fig4.add_hline(y=fy26_target, line_dash="dash", line_color="red",
                annotation_text=f"FY26 Target ({fy26_target}%)")
 fig4.update_xaxes(tickangle=30)
@@ -163,4 +194,3 @@ st.plotly_chart(fig4, use_container_width=True)
 
 st.markdown("---")
 st.caption("Data source: USPS Service Performance Dashboard (spm.usps.com) | Rural classification: HRSA FORHP | Pipeline: Apache Spark on GCP Dataproc | Team Nexus Ninjas | Challenge X | GMU")
-
