@@ -36,6 +36,7 @@ def load_data():
     mailtype = read_folder('results/mailtype_summary/')
     origin = read_folder('results/origin_summary/')
     dest = read_folder('results/dest_summary/')
+    trend = read_folder('results/trend_summary/')
 
     rural_urban = rural_urban.dropna(subset=['rural_urban']).copy()
     rural_urban['rural_urban'] = rural_urban['rural_urban'].map({'Yes': 'Rural', 'No': 'Urban'})
@@ -56,10 +57,15 @@ def load_data():
     dest['type'] = 'Receiving (Destination)'
     dest = dest.rename(columns={'dest_rural_label': 'origin_rural_label'})
 
-    return rural_urban, district, mailtype, origin, dest
+    trend['avg_score_pct'] = trend['avg_score'] * 100
+    trend['rptg_start_date'] = pd.to_datetime(trend['rptg_start_date'])
+    trend = trend.sort_values('rptg_start_date')
+    trend['month'] = trend['rptg_start_date'].dt.strftime('%b %Y')
+
+    return rural_urban, district, mailtype, origin, dest, trend
 
 with st.spinner("Loading latest data from GCP..."):
-    rural_urban, district, mailtype, origin, dest = load_data()
+    rural_urban, district, mailtype, origin, dest, trend = load_data()
 
 if st.button("Refresh Data"):
     st.cache_data.clear()
@@ -79,6 +85,18 @@ col2.metric("Urban On-Time Rate", f"{urban['avg_score_pct']:.1f}%", f"{urban['av
 col3.metric("Rural vs Urban Gap", f"{abs(rural['avg_score_pct'] - urban['avg_score_pct']):.1f}%", "Rural higher" if rural['avg_score_pct'] > urban['avg_score_pct'] else "Urban higher")
 col4.metric("Rural Avg Days", f"{rural['avg_days']:.2f}", f"{rural['avg_days'] - urban['avg_days']:.2f} vs Urban")
 col5.metric("Total Records", f"{rural_urban['total_records'].sum()/1e6:.0f}M", "rows analyzed")
+
+st.markdown("---")
+
+st.subheader("Performance Trend Over Time")
+fig6 = px.line(trend, x='month', y='avg_score_pct',
+               color='rural_urban',
+               color_discrete_map={'Rural': '#E8593C', 'Urban': '#1D9E75'},
+               markers=True,
+               labels={'avg_score_pct': 'On-Time Rate (%)', 'month': 'Month', 'rural_urban': ''})
+fig6.add_hline(y=fy26_target, line_dash="dash", line_color="red", annotation_text="FY26 Target (89%)")
+fig6.update_layout(yaxis_range=[70, 92])
+st.plotly_chart(fig6, use_container_width=True)
 
 st.markdown("---")
 
